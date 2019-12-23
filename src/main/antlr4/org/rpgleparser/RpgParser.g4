@@ -2,7 +2,7 @@ parser grammar RpgParser;
 
 //import FreeOpsParser;
 
-options {   tokenVocab = RpgLexer; }
+options { tokenVocab = RpgLexer; }
 
 r: (dcl_pr 
 	| dcl_pi
