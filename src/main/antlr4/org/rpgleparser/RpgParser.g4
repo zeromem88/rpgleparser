@@ -4,7 +4,8 @@ parser grammar RpgParser;
 
 options { tokenVocab = RpgLexer; }
 
-r: (dcl_pr 
+r: (full_free_style
+    | dcl_pr
 	| dcl_pi
 	| ctl_opt
 //	|dspec_continuation
@@ -13,8 +14,12 @@ r: (dcl_pr
   	| statement
   	| procedure
 )*
-endSource*
+//endSource*
 ;
+
+full_free_style: FULL_FREE_SOURCE
+;
+
 statement:
 	dspec 
 	| dcl_ds

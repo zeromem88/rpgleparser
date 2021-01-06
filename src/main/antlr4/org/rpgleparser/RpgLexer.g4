@@ -5,44 +5,61 @@
 lexer grammar RpgLexer;
 
 @members {
+    int lastTokenType = 0;
+    boolean isFullFree = false;
+
 	public boolean isEndOfToken() {
-		return " (;".indexOf(_input.LA(1)) >=0;
+		return " (;".indexOf(_input.LA(1)) >= 0;
 	}
-	int lastTokenType = 0;
+
 	public void emit(Token token) {
 		super.emit(token);
-		lastTokenType = token.getType();
+		int tokenType = token.getType();
+		// **FREE token must be the first token in the source
+		if(lastTokenType == 0 && tokenType == FULL_FREE_SOURCE) {
+		    isFullFree = true;
+		}
+		lastTokenType = tokenType;
 	}
-	protected int getLastTokenType(){
+
+	protected int getLastTokenType() {
 		return lastTokenType;
+	}
+
+	protected boolean isFullFree() {
+	    return isFullFree;
 	}
 } 
 
 // Parser Rules
+    // Full-free
+FULL_FREE_SOURCE : '**' [fF][rR][eE][eE] [ \t]* NEWLINE;
 	//End Source.  Not more parsing after this.
-END_SOURCE :  '**' {getCharPositionInLine()==2}? ~[\r\n]~[\r\n]~[\r\n]~[\r\n*]~[\r\n]* EOL  -> pushMode(EndOfSourceMode) ;
+END_SOURCE : '**' {getCharPositionInLine()==2}? ~[\r\n]~[\r\n]~[\r\n]~[\r\n*]~[\r\n]* EOL  -> pushMode(EndOfSourceMode) ;
+    // If full-free, run free mode
+FULL_FREE_SPEC : {isFullFree()}? -> pushMode(OpCode), skip;
     //Ignore or skip leading 5 white space.
-LEAD_WS5 :  '     ' {getCharPositionInLine()==5}? -> skip;
-LEAD_WS5_Comments :  WORD5 {getCharPositionInLine()==5}? -> channel(HIDDEN);
+LEAD_WS5 : {!isFullFree()}? '     ' {getCharPositionInLine()==5}? -> skip;
+LEAD_WS5_Comments : {!isFullFree()}? WORD5 {getCharPositionInLine()==5}? -> channel(HIDDEN);
 	//5 position blank means FREE, unless..
-FREE_SPEC : {getCharPositionInLine()==5}? [ ] -> pushMode(OpCode),skip;
+FREE_SPEC : {!isFullFree() && getCharPositionInLine()==5}? [ ] -> pushMode(OpCode),skip;
     // 6th position asterisk is a comment
-COMMENT_SPEC_FIXED : {getCharPositionInLine()==5}? .'*' -> pushMode(FIXED_CommentMode),channel(HIDDEN) ;
+COMMENT_SPEC_FIXED : {!isFullFree()}? {getCharPositionInLine()==5}? .'*' -> pushMode(FIXED_CommentMode),channel(HIDDEN) ;
     // X specs 
-DS_FIXED : [dD] {getCharPositionInLine()==6}? -> pushMode(FIXED_DefSpec) ; 
-FS_FIXED : [fF] {getCharPositionInLine()==6}? -> pushMode(FIXED_FileSpec) ;
-OS_FIXED : [oO] {getCharPositionInLine()==6}? -> pushMode(FIXED_OutputSpec) ;
-CS_FIXED : [cC] {getCharPositionInLine()==6}? -> pushMode(FIXED_CalcSpec),pushMode(OnOffIndicatorMode),pushMode(IndicatorMode) ;
-CS_ExecSQL:[cC] '/' {getCharPositionInLine()==7}? EXEC_SQL -> pushMode(FIXED_CalcSpec_SQL);
-IS_FIXED : [iI] {getCharPositionInLine()==6}? -> pushMode(FIXED_InputSpec) ;
-PS_FIXED : [pP] {getCharPositionInLine()==6}? -> pushMode(FIXED_ProcedureSpec) ;
-HS_FIXED : [hH] {getCharPositionInLine()==6}? -> pushMode(HeaderSpecMode) ;
+DS_FIXED :  {!isFullFree()}? [dD] {getCharPositionInLine()==6}? -> pushMode(FIXED_DefSpec) ;
+FS_FIXED :  {!isFullFree()}? [fF] {getCharPositionInLine()==6}? -> pushMode(FIXED_FileSpec) ;
+OS_FIXED :  {!isFullFree()}? [oO] {getCharPositionInLine()==6}? -> pushMode(FIXED_OutputSpec) ;
+CS_FIXED :  {!isFullFree()}? [cC] {getCharPositionInLine()==6}? -> pushMode(FIXED_CalcSpec),pushMode(OnOffIndicatorMode),pushMode(IndicatorMode) ;
+CS_ExecSQL: {!isFullFree()}? [cC] '/' {getCharPositionInLine()==7}? EXEC_SQL -> pushMode(FIXED_CalcSpec_SQL);
+IS_FIXED :  {!isFullFree()}? [iI] {getCharPositionInLine()==6}? -> pushMode(FIXED_InputSpec) ;
+PS_FIXED :  {!isFullFree()}? [pP] {getCharPositionInLine()==6}? -> pushMode(FIXED_ProcedureSpec) ;
+HS_FIXED :  {!isFullFree()}? [hH] {getCharPositionInLine()==6}? -> pushMode(HeaderSpecMode) ;
 
 BLANK_LINE : [ ] {getCharPositionInLine()==6}? [ ]* NEWLINE -> skip;
-BLANK_SPEC_LINE1 : . NEWLINE {getCharPositionInLine()==7}?-> skip;
+BLANK_SPEC_LINE1 : . NEWLINE {getCharPositionInLine()==7}? -> skip;
 BLANK_SPEC_LINE : .[ ] {getCharPositionInLine()==7}? [ ]* NEWLINE -> skip;
-COMMENTS : [ ] {getCharPositionInLine()>=6}? [ ]*? '//' -> pushMode(FIXED_CommentMode),channel(HIDDEN) ;
-EMPTY_LINE : 
+COMMENTS : {!isFullFree()}? [ ] {getCharPositionInLine()>=6}? [ ]*? '//' -> pushMode(FIXED_CommentMode),channel(HIDDEN) ;
+EMPTY_LINE : {!isFullFree()}?
 	'                                                                           ' 
 	{getCharPositionInLine()>=80}? -> pushMode(FIXED_CommentMode),channel(HIDDEN) ;
 	
@@ -102,7 +119,7 @@ EOS_EOL : NEWLINE -> type(EOL);
 
 // -----------------  ---------------------
 mode OpCode;
-OP_WS: [ \t] {getCharPositionInLine()>6}? [ \t]* -> skip;
+OP_WS: [ \t] {getCharPositionInLine()>6 || isFullFree()}? [ \t]* -> skip;
 OP_ACQ: [Aa][Cc][Qq] {isEndOfToken()}?-> mode(FREE),pushMode(FreeOpExtender);
 OP_BEGSR: [Bb][Ee][Gg][Ss][Rr] {isEndOfToken()}?-> mode(FREE);
 OP_CALLP: [Cc][Aa][Ll][Ll][Pp] {isEndOfToken()}?-> mode(FREE),pushMode(FreeOpExtender);
